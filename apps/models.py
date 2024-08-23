@@ -1,7 +1,10 @@
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
-from django.db.models import TextChoices, Model, DateTimeField, CharField, SlugField
+from django.core.validators import FileExtensionValidator
+from django.db.models import TextChoices, Model, DateTimeField, CharField, SlugField, FloatField, ForeignKey, \
+    IntegerField, CASCADE, TextField, FileField, ImageField
 from django.utils.text import slugify
+from django_resized import ResizedImageField
 
 
 class CustomUserManager(BaseUserManager):
@@ -46,12 +49,19 @@ class BaseSlugModel(Model):
         return self.name
 
 
+class Region(Model):
+    name = CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
 class User(AbstractUser):
     class Role(TextChoices):
         ADMIN = "admin", 'Admin'
         OPERATOR = "operator", 'Operator'
         MANAGER = "manager", 'Manager'
-        DRIVER = "driver", 'Driver'
+        SELLER = "seller", 'Seller'
         USER = "user", 'User'
 
     username = None
@@ -59,4 +69,59 @@ class User(AbstractUser):
     REQUIRED_FIELDS = []
     objects = CustomUserManager()
     role = CharField(max_length=50, choices=Role.choices, default=Role.USER)
-    phone_number = CharField(max_length=12, unique=True)
+    phone_number = CharField(db_column='user_phone_number', max_length=12, unique=True)
+
+
+class Product(BaseModel, BaseSlugModel):
+    price = FloatField()
+    category = ForeignKey('apps.Category', on_delete=CASCADE, to_field='slug', related_name='products')
+    order_count = IntegerField(default=0)
+    description = TextField()
+    video = FileField(upload_to='videos', null=True, blank=True,
+                      validators=[
+                          FileExtensionValidator(allowed_extensions=['MOV', 'avi', 'mp4', 'webm', 'mkv'])])
+    store = ForeignKey('apps.Store', on_delete=CASCADE, related_name='products')
+
+
+def __str__(self):
+    return self.name
+
+
+class Category(BaseSlugModel):
+    image = ImageField(upload_to='images/')
+
+    class Meta:
+        verbose_name_plural = 'Categories'
+
+    def __str__(self):
+        return self.name
+
+
+class ProductImage(Model):
+    image = ResizedImageField(size=[200, 200], quality=100, upload_to='products/')
+    product = ForeignKey('apps.Product', on_delete=CASCADE, related_name='images')
+
+
+class Order(BaseModel):
+    user = ForeignKey('apps.User', CASCADE, related_name='orders')
+    product = ForeignKey('apps.Product', CASCADE, related_name='orders')
+    phone_number = CharField(max_length=25)
+    full_name = CharField(max_length=255)
+
+
+class Store(BaseModel):
+    name = CharField(max_length=255, default=None)
+    owner = ForeignKey('apps.User', on_delete=CASCADE, related_name='store')
+    image = ImageField(upload_to='static/images/', null=True, blank=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Comment(BaseModel):
+    text = CharField(max_length=255, null=True, blank=True)
+    user = ForeignKey(User, on_delete=CASCADE)
+    product = ForeignKey('apps.Product', on_delete=CASCADE, related_name='comments')
+
+    def __str__(self):
+        return self.text
